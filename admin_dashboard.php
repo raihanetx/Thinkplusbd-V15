@@ -82,8 +82,88 @@ function get_products() {
     return json_decode($json_data, true);
 }
 
+function get_reviews() {
+    $reviews_file_path = __DIR__ . '/reviews.json';
+    if (!file_exists($reviews_file_path)) {
+        return [];
+    }
+    $json_data = file_get_contents($reviews_file_path);
+    return json_decode($json_data, true);
+}
+
+function save_reviews($reviews) {
+    $reviews_file_path = __DIR__ . '/reviews.json';
+    $json_data = json_encode(array_values($reviews), JSON_PRETTY_PRINT);
+    file_put_contents($reviews_file_path, $json_data);
+}
+
+function get_coupons() {
+    $coupons_file_path = __DIR__ . '/coupons.json';
+    if (!file_exists($coupons_file_path)) {
+        return [];
+    }
+    $json_data = file_get_contents($coupons_file_path);
+    return json_decode($json_data, true);
+}
+
+function save_coupons($coupons) {
+    $coupons_file_path = __DIR__ . '/coupons.json';
+    $json_data = json_encode(array_values($coupons), JSON_PRETTY_PRINT);
+    file_put_contents($coupons_file_path, $json_data);
+}
+
 // Handle form submissions for categories
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['create_coupon'])) {
+        $coupons = get_coupons();
+        $new_coupon = [
+            'code' => $_POST['coupon_code'],
+            'discount_percentage' => (int)$_POST['discount_percentage'],
+            'applicable_to' => $_POST['applicable_to'],
+            'applicable_value' => $_POST['applicable_value']
+        ];
+        $coupons[] = $new_coupon;
+        save_coupons($coupons);
+        header("Location: admin_dashboard.php?page=coupons&status=created");
+        exit();
+    }
+
+    if (isset($_POST['delete_coupon'])) {
+        $coupon_code = $_POST['coupon_code'];
+        $coupons = get_coupons();
+        $coupons = array_filter($coupons, function($coupon) use ($coupon_code) {
+            return $coupon['code'] !== $coupon_code;
+        });
+        save_coupons($coupons);
+        header("Location: admin_dashboard.php?page=coupons&status=deleted");
+        exit();
+    }
+
+    if (isset($_POST['approve_review'])) {
+        $review_id = $_POST['review_id'];
+        $reviews = get_reviews();
+        foreach ($reviews as &$review) {
+            if ($review['id'] === $review_id) {
+                $review['status'] = 'approved';
+                break;
+            }
+        }
+        save_reviews($reviews);
+        header("Location: admin_dashboard.php?page=reviews&status=approved");
+        exit();
+    }
+
+    if (isset($_POST['delete_review'])) {
+        $review_id = $_POST['review_id'];
+        $reviews = get_reviews();
+        $reviews = array_filter($reviews, function($review) use ($review_id) {
+            return $review['id'] !== $review_id;
+        });
+        save_reviews($reviews);
+        header("Location: admin_dashboard.php?page=reviews&status=deleted");
+        exit();
+    }
+
     if (isset($_POST['add_category'])) {
         $new_category_name = trim($_POST['category_name']);
         $new_category_icon = trim($_POST['category_icon']);
@@ -144,6 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'price' => (float)$_POST['price'],
             'image' => $image_path,
             'isFeatured' => isset($_POST['isFeatured']) && $_POST['isFeatured'] === 'true',
+            'stock' => isset($_POST['stock']) ? (int)$_POST['stock'] : 1,
             'durations' => []
         ];
 
@@ -173,6 +254,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $products[$product_index]['description'] = $_POST['description'];
                 $products[$product_index]['longDescription'] = $_POST['longDescription'];
                 $products[$product_index]['price'] = (float)$_POST['price'];
+                $products[$product_index]['discountPercentage'] = isset($_POST['discountPercentage']) ? (int)$_POST['discountPercentage'] : 0;
+                $products[$product_index]['stock'] = isset($_POST['stock']) ? (int)$_POST['stock'] : 1;
+                $products[$product_index]['isFeatured'] = isset($_POST['isFeatured']) && $_POST['isFeatured'] === 'true';
 
                 $durations = [];
                 if (isset($_POST['durations']) && is_array($_POST['durations'])) {
@@ -271,6 +355,8 @@ $current_total_pending_all_time = getCurrentTotalPendingOrders($all_site_orders_
                     <li><a href="admin_dashboard.php" class="<?php echo (strpos($_SERVER['REQUEST_URI'], 'admin_dashboard.php') !== false && empty($_GET['page']) && strpos($_SERVER['REQUEST_URI'], 'product_code_generator.html') === false) ? 'active' : ''; ?>"><i class="fas fa-chart-pie"></i> <span>Dashboard</span></a></li>
                     <li><a href="admin_dashboard.php?page=categories" class="<?php echo (isset($_GET['page']) && $_GET['page'] === 'categories') ? 'active' : ''; ?>"><i class="fas fa-tags"></i> <span>Manage Categories</span></a></li>
                     <li><a href="admin_dashboard.php?page=edit_products" class="<?php echo (isset($_GET['page']) && $_GET['page'] === 'edit_products') ? 'active' : ''; ?>"><i class="fas fa-edit"></i> <span>Edit Products</span></a></li>
+                    <li><a href="admin_dashboard.php?page=reviews" class="<?php echo (isset($_GET['page']) && $_GET['page'] === 'reviews') ? 'active' : ''; ?>"><i class="fas fa-star"></i> <span>Manage Reviews</span></a></li>
+                    <li><a href="admin_dashboard.php?page=coupons" class="<?php echo (isset($_GET['page']) && $_GET['page'] === 'coupons') ? 'active' : ''; ?>"><i class="fas fa-tags"></i> <span>Manage Coupons</span></a></li>
                     <li><a href="product_code_generator.html" target="_blank"><i class="fas fa-plus-circle"></i> <span>Add Product Helper</span></a></li>
                     <li><a href="admin_dashboard.php?logout=1"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
                 </ul>
@@ -457,8 +543,142 @@ $current_total_pending_all_time = getCurrentTotalPendingOrders($all_site_orders_
                             <input type="checkbox" name="isFeatured" id="isFeatured" value="true">
                         </div>
 
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label for="stock">Stock Status</label>
+                            <select name="stock" id="stock" class="form-control" style="width: 100%; padding: 0.5rem; border-radius: var(--border-radius); border: 1px solid var(--border-color);">
+                                <option value="1" selected>In Stock</option>
+                                <option value="0">Out of Stock</option>
+                            </select>
+                        </div>
+
                         <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1rem; border: none; background-color: var(--primary-color); color: white; border-radius: var(--border-radius); cursor: pointer;">Add Product</button>
                     </form>
+                </div>
+            <?php elseif (isset($_GET['page']) && $_GET['page'] === 'coupons'): ?>
+                <div class="content-card">
+                    <h2 class="card-title">Manage Coupons</h2>
+                    <?php
+                    if (isset($_GET['status'])) {
+                        if ($_GET['status'] == 'created') {
+                            echo '<div class="alert-message alert-success">Coupon successfully created!</div>';
+                        } elseif ($_GET['status'] == 'deleted') {
+                            echo '<div class="alert-message alert-success">Coupon successfully deleted!</div>';
+                        }
+                    }
+                    ?>
+                    <form method="POST" action="admin_dashboard.php?page=coupons" style="margin-bottom: 2rem;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 1rem; align-items: end;">
+                            <div>
+                                <label for="coupon_code">Coupon Code</label>
+                                <input type="text" id="coupon_code" name="coupon_code" required>
+                            </div>
+                            <div>
+                                <label for="discount_percentage">Discount (%)</label>
+                                <input type="number" id="discount_percentage" name="discount_percentage" required>
+                            </div>
+                            <div>
+                                <label for="applicable_to">Applicable To</label>
+                                <select id="applicable_to" name="applicable_to">
+                                    <option value="product">Product</option>
+                                    <option value="category">Category</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="applicable_value">Product ID / Category Name</label>
+                                <input type="text" id="applicable_value" name="applicable_value" required>
+                            </div>
+                            <button type="submit" name="create_coupon" class="action-btn">Create Coupon</button>
+                        </div>
+                    </form>
+                    <div class="orders-table-container">
+                        <table class="orders-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Discount</th>
+                                    <th>Applicable To</th>
+                                    <th>Value</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                $coupons = get_coupons();
+                                if ($coupons) {
+                                    foreach ($coupons as $coupon) {
+                                        echo '<tr>';
+                                        echo '<td data-label="Code">' . htmlspecialchars($coupon['code']) . '</td>';
+                                        echo '<td data-label="Discount">' . htmlspecialchars($coupon['discount_percentage']) . '%</td>';
+                                        echo '<td data-label="Applicable To">' . htmlspecialchars($coupon['applicable_to']) . '</td>';
+                                        echo '<td data-label="Value">' . htmlspecialchars($coupon['applicable_value']) . '</td>';
+                                        echo '<td data-label="Actions">';
+                                        echo '<form method="POST" action="admin_dashboard.php?page=coupons" style="display:inline;" onsubmit="return confirm(\'Are you sure you want to delete this coupon?\');">';
+                                        echo '<input type="hidden" name="coupon_code" value="' . htmlspecialchars($coupon['code']) . '">';
+                                        echo '<button type="submit" name="delete_coupon" class="action-btn action-btn-delete">Delete</button>';
+                                        echo '</form>';
+                                        echo '</td>';
+                                        echo '</tr>';
+                                    }
+                                }
+                                ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php elseif (isset($_GET['page']) && $_GET['page'] === 'reviews'): ?>
+                <div class="content-card">
+                    <h2 class="card-title">Manage Reviews</h2>
+                    <?php
+                    if (isset($_GET['status'])) {
+                        if ($_GET['status'] == 'approved') {
+                            echo '<div class="alert-message alert-success">Review successfully approved!</div>';
+                        } elseif ($_GET['status'] == 'deleted') {
+                            echo '<div class="alert-message alert-success">Review successfully deleted!</div>';
+                        }
+                    }
+                    ?>
+                    <div class="orders-table-container">
+                        <table class="orders-table">
+                            <thead>
+                                <tr>
+                                    <th>Product ID</th>
+                                    <th>Reviewer</th>
+                                    <th>Rating</th>
+                                    <th>Review</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                $reviews = get_reviews();
+                                if ($reviews) {
+                                    foreach ($reviews as $review) {
+                                        echo '<tr>';
+                                        echo '<td data-label="Product ID">' . htmlspecialchars($review['product_id']) . '</td>';
+                                        echo '<td data-label="Reviewer">' . htmlspecialchars($review['reviewer_name']) . '</td>';
+                                        echo '<td data-label="Rating">' . htmlspecialchars($review['rating']) . '</td>';
+                                        echo '<td data-label="Review">' . htmlspecialchars($review['review_text']) . '</td>';
+                                        echo '<td data-label="Status">' . htmlspecialchars($review['status']) . '</td>';
+                                        echo '<td data-label="Actions">';
+                                        if ($review['status'] === 'pending') {
+                                            echo '<form method="POST" action="admin_dashboard.php?page=reviews" style="display:inline;">';
+                                            echo '<input type="hidden" name="review_id" value="' . htmlspecialchars($review['id']) . '">';
+                                            echo '<button type="submit" name="approve_review" class="action-btn">Approve</button>';
+                                            echo '</form>';
+                                        }
+                                        echo '<form method="POST" action="admin_dashboard.php?page=reviews" style="display:inline;" onsubmit="return confirm(\'Are you sure you want to delete this review?\');">';
+                                        echo '<input type="hidden" name="review_id" value="' . htmlspecialchars($review['id']) . '">';
+                                        echo '<button type="submit" name="delete_review" class="action-btn action-btn-delete">Delete</button>';
+                                        echo '</form>';
+                                        echo '</td>';
+                                        echo '</tr>';
+                                    }
+                                }
+                                ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             <?php elseif (isset($_GET['page']) && $_GET['page'] === 'edit_product' && isset($_GET['id'])): ?>
                 <?php
@@ -482,6 +702,19 @@ $current_total_pending_all_time = getCurrentTotalPendingOrders($all_site_orders_
                             <div class="form-group" style="margin-bottom: 1rem;">
                                 <label for="name">Product Title</label>
                                 <input type="text" name="name" id="name" value="<?php echo htmlspecialchars($product_to_edit['name']); ?>" class="form-control" style="width: 100%; padding: 0.5rem; border-radius: var(--border-radius); border: 1px solid var(--border-color);">
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="discountPercentage">Discount Percentage</label>
+                                <input type="number" name="discountPercentage" id="discountPercentage" value="<?php echo htmlspecialchars($product_to_edit['discountPercentage'] ?? 0); ?>" class="form-control" style="width: 100%; padding: 0.5rem; border-radius: var(--border-radius); border: 1px solid var(--border-color);">
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="stock">Stock Status</label>
+                                <select name="stock" id="stock" class="form-control" style="width: 100%; padding: 0.5rem; border-radius: var(--border-radius); border: 1px solid var(--border-color);">
+                                    <option value="1" <?php if (isset($product_to_edit['stock']) && $product_to_edit['stock'] == 1) echo 'selected'; ?>>In Stock</option>
+                                    <option value="0" <?php if (isset($product_to_edit['stock']) && $product_to_edit['stock'] == 0) echo 'selected'; ?>>Out of Stock</option>
+                                </select>
                             </div>
 
                             <div class="form-group" style="margin-bottom: 1rem;">
@@ -525,6 +758,11 @@ $current_total_pending_all_time = getCurrentTotalPendingOrders($all_site_orders_
                             <div class="form-group" style="margin-bottom: 1rem;">
                                 <label for="image">Upload New Image (optional)</label>
                                 <input type="file" name="image" id="image" class="form-control-file">
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="isFeatured">Featured Product?</label>
+                                <input type="checkbox" name="isFeatured" id="isFeatured" value="true" <?php if (isset($product_to_edit['isFeatured']) && $product_to_edit['isFeatured']) echo 'checked'; ?>>
                             </div>
 
                             <button type="submit" class="btn btn-primary" style="padding: 0.5rem 1rem; border: none; background-color: var(--primary-color); color: white; border-radius: var(--border-radius); cursor: pointer;">Update Product</button>
