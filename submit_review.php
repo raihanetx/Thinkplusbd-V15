@@ -1,39 +1,34 @@
 <?php
-session_start();
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+header('Content-Type: application/json');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $product_id = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
-    $name = isset($_POST['name']) ? trim($_POST['name']) : '';
-    $rating = isset($_POST['rating']) ? (int)$_POST['rating'] : 0;
-    $comment = isset($_POST['comment']) ? trim($_POST['comment']) : '';
+$input = json_decode(file_get_contents('php://input'), true);
 
-    if ($product_id > 0 && !empty($name) && $rating > 0 && !empty($comment)) {
-        $reviews_file_path = __DIR__ . '/reviews.json';
-        $reviews = [];
-        if (file_exists($reviews_file_path)) {
-            $reviews_json = file_get_contents($reviews_file_path);
-            $reviews = json_decode($reviews_json, true);
-        }
+if (isset($input['product_id'], $input['reviewer_name'], $input['rating'], $input['review_text'])) {
+    $reviews_file = __DIR__ . '/reviews.json';
+    $reviews = [];
 
-        $new_review = [
-            'product_id' => $product_id,
-            'name' => $name,
-            'rating' => $rating,
-            'comment' => $comment,
-            'timestamp' => date('Y-m-d H:i:s')
-        ];
-
-        $reviews[] = $new_review;
-        $json_data = json_encode($reviews, JSON_PRETTY_PRINT);
-        file_put_contents($reviews_file_path, $json_data);
-
-        header("Location: index.html#product/1/capcut-pro-pc-version&status=review_submitted"); // Redirect back to product page
-        exit();
+    if (file_exists($reviews_file)) {
+        $reviews = json_decode(file_get_contents($reviews_file), true);
     }
-}
 
-header("Location: index.html#product/1/capcut-pro-pc-version&status=review_failed"); // Redirect back to product page
-exit();
+    $new_review = [
+        'id' => uniqid(),
+        'product_id' => $input['product_id'],
+        'reviewer_name' => htmlspecialchars($input['reviewer_name']),
+        'rating' => intval($input['rating']),
+        'review_text' => htmlspecialchars($input['review_text']),
+        'status' => 'pending',
+        'created_at' => date('Y-m-d H:i:s')
+    ];
+
+    $reviews[] = $new_review;
+
+    if (file_put_contents($reviews_file, json_encode($reviews, JSON_PRETTY_PRINT))) {
+        echo json_encode(['success' => true, 'message' => 'Review submitted successfully. It will be visible after approval.']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to save review.']);
+    }
+} else {
+    echo json_encode(['success' => false, 'message' => 'Invalid input.']);
+}
 ?>
